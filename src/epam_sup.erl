@@ -50,7 +50,9 @@ start_link() ->
 %% @end
 %%--------------------------------------------------------------------
 init([]) ->
-    {ok, {{one_for_one, 10, 1}, []}}.
+    EPAM = {epam, {epam, start_link, []},
+            permanent, brutal_kill, worker, [epam]},
+    {ok, {{one_for_one, 10, 1}, [EPAM]}}.
 
 %%%===================================================================
 %%% Internal functions
