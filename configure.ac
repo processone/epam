@@ -30,7 +30,7 @@ AC_ERLANG_SUBST_LIB_DIR
 
 AC_CHECK_LIB(pam, pam_start, [PAM_LIB=yes], [], [])
 AC_CHECK_LIB(pthread, pthread_create, [PTHREAD_LIB=yes], [], [])
-AC_CHECK_HEADER(security/pam_appl.h, [], [], [])
+AC_CHECK_HEADER(security/pam_appl.h, [PAM_HEADER=yes], [], [])
 
 if test "x$PAM_LIB" = "x"; then
    AC_MSG_ERROR([PAM library was not found])
@@ -40,7 +40,7 @@ if test "x$PTHREAD_LIB" = "x"; then
    AC_MSG_ERROR([pthread library was not found])
 fi
 
-if test "x$HAVE_SECURITY/PAM_APPL.H" = "x"; then
+if test "x$PAM_HEADER" = "x"; then
    AC_MSG_ERROR([PAM header file "security/pam_appl.h" was not found])
 fi
 

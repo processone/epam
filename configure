@@ -3935,7 +3935,7 @@ fi
 
 ac_fn_c_check_header_mongrel "$LINENO" "security/pam_appl.h" "ac_cv_header_security_pam_appl_h" "$ac_includes_default"
 if test "x$ac_cv_header_security_pam_appl_h" = x""yes; then :
-
+  PAM_HEADER=yes
 fi
 
 
@@ -3948,7 +3948,7 @@ if test "x$PTHREAD_LIB" = "x"; then
    as_fn_error $? "pthread library was not found" "$LINENO" 5
 fi
 
-if test "x$HAVE_SECURITY/PAM_APPL.H" = "x"; then
+if test "x$PAM_HEADER" = "x"; then
    as_fn_error $? "PAM header file \"security/pam_appl.h\" was not found" "$LINENO" 5
 fi
 
