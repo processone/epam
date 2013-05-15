@@ -142,7 +142,7 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 get_bin_path() ->
     case os:getenv("EJABBERD_BIN_PATH") of
 	false ->
-	    case code:priv_dir(epam) of
+	    case code:priv_dir(p1_pam) of
 		{error, _} ->
                     filename:join(["priv", "bin"]);
 		Path ->
