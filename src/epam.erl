@@ -35,7 +35,7 @@
 %% API
 -export([start_link/0, start/0, stop/0]).
 
--export([authenticate/3, acct_mgmt/2]).
+-export([authenticate/3, authenticate/4, acct_mgmt/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2,
@@ -52,7 +52,6 @@
 -define(PROCNAME, ?MODULE).
 
 -define(CMD_AUTH, 0).
-
 -define(CMD_ACCT, 1).
 
 -record(state, {port}).
@@ -74,7 +73,12 @@ start_link() ->
 authenticate(Srv, User, Pass)
     when is_binary(Srv), is_binary(User), is_binary(Pass) ->
     gen_server:call(?PROCNAME,
-		    {authenticate, Srv, User, Pass}).
+		    {authenticate, Srv, User, Pass, ""}).
+
+authenticate(Srv, User, Pass, Rhost)
+    when is_binary(Srv), is_binary(User), is_binary(Pass), is_binary(Rhost) ->
+    gen_server:call(?PROCNAME,
+		    {authenticate, Srv, User, Pass, Rhost}).
 
 acct_mgmt(Srv, User)
     when is_binary(Srv), is_binary(User) ->
@@ -101,11 +105,11 @@ init([]) ->
 terminate(_Reason, #state{port = Port}) ->
     catch port_close(Port), ok.
 
-handle_call({authenticate, Srv, User, Pass}, From,
+handle_call({authenticate, Srv, User, Pass, Rhost}, From,
 	    State) ->
     Port = State#state.port,
     Data = term_to_binary({?CMD_AUTH, From,
-			   {Srv, User, Pass}}),
+			   {Srv, User, Pass, Rhost}}),
     port_command(Port, Data),
     {noreply, State};
 handle_call({acct_mgmt, Srv, User}, From, State) ->

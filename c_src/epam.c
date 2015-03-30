@@ -62,7 +62,7 @@ static int misc_conv(int num_msg,
   return PAM_SUCCESS;
 }
 
-static int auth(char *service, char *user, char *password)
+static int auth(char *service, char *user, char *password, char *rhost)
 {
   struct pam_conv conv = {misc_conv, password};
   int retval;
@@ -70,6 +70,8 @@ static int auth(char *service, char *user, char *password)
   retval = pam_start(service, user, &conv, &pamh);
   if (retval == PAM_SUCCESS)
     retval = pam_set_item(pamh, PAM_RUSER, user);
+  if (retval == PAM_SUCCESS)
+    retval = pam_set_item(pamh, PAM_RHOST, rhost);
 #ifdef PAM_FAIL_DELAY
   if (retval == PAM_SUCCESS)
     retval = pam_set_item(pamh, PAM_FAIL_DELAY, (void *)delay_fn);
@@ -201,9 +203,9 @@ static int process_acct(ETERM *pid, ETERM *data)
 static int process_auth(ETERM *pid, ETERM *data)
 {
   int retval = 0;
-  ETERM *pattern, *srv, *user, *pass;
-  char *service, *username, *password;
-  pattern = erl_format("{Srv, User, Pass}");
+  ETERM *pattern, *srv, *user, *pass, *rhost;
+  char *service, *username, *password, *remote_host;
+  pattern = erl_format("{Srv, User, Pass, Rhost}");
   if (erl_match(pattern, data))
     {
       srv = erl_var_content(pattern, "Srv");
@@ -212,7 +214,9 @@ static int process_auth(ETERM *pid, ETERM *data)
       username = erl_iolist_to_string(user);
       pass = erl_var_content(pattern, "Pass");
       password = erl_iolist_to_string(pass);
-      retval = process_reply(pid, CMD_AUTH, auth(service, username, password));
+      rhost = erl_var_content(pattern, "Rhost");
+      remote_host = erl_iolist_to_string(rhost);
+      retval = process_reply(pid, CMD_AUTH, auth(service, username, password, remote_host));
       erl_free_term(srv);
       erl_free_term(user);
       erl_free_term(pass);
