@@ -73,7 +73,7 @@ start_link() ->
 authenticate(Srv, User, Pass)
     when is_binary(Srv), is_binary(User), is_binary(Pass) ->
     gen_server:call(?PROCNAME,
-		    {authenticate, Srv, User, Pass, ""}).
+		    {authenticate, Srv, User, Pass, <<"">>}).
 
 authenticate(Srv, User, Pass, Rhost)
     when is_binary(Srv), is_binary(User), is_binary(Pass), is_binary(Rhost) ->
