@@ -1,8 +1,9 @@
 %%%----------------------------------------------------------------------
-%%% File    : rebar.config
-%%% Author  : Mickael Remond <mremond@process-one.net>
-%%% Purpose : Rebar build script. Compliant with rebar and rebar3.
-%%% Created : 15 Dec 2015 by Mickael Remond <mremond@process-one.net>
+%%% File    : esip.app.src
+%%% Author  : Evgeniy Khramtsov <ekhramtsov@process-one.net>
+%%% Purpose : Application package description
+%%% Created : 4 Apr 2013 by Evgeniy Khramtsov <ekhramtsov@process-one.net>
+%%%
 %%%
 %%% Copyright (C) 2002-2017 ProcessOne, SARL. All Rights Reserved.
 %%%
@@ -20,22 +21,21 @@
 %%%
 %%%----------------------------------------------------------------------
 
-{erl_opts, [debug_info, {src_dirs, ["src"]}]}.
+{application, epam,
+ [{description,  "epam helper for PAM authentication support"},
+  {vsn,          "1.0.1"},
+  {modules,      []},
+  {registered,   []},
+  {applications, [kernel, stdlib]},
+  {env,          []},
+  {mod,          {epam_app,[]}},
 
-{port_env, [{"CFLAGS", "$CFLAGS"},
-	    {"LDFLAGS", "$LDFLAGS"}]}.
-
-% {port_env, [{"EXE_LDFLAGS", "$ERL_LDFLAGS -lpthread -lpam"}]}.
-
-{port_specs, [{"priv/bin/epam", ["c_src/epam.c"]}]}.
-
-{cover_enabled, true}.
-{cover_export_enabled, true}.
-
-{xref_checks, [undefined_function_calls, undefined_functions, deprecated_function_calls, deprecated_functions]}.
-
-{profiles, [{test, [{erl_opts, [{src_dirs, ["src", "test"]}]}]}]}.
-{plugins, []}.
+  %% hex.pm packaging:
+  {files, ["src/", "c_src/epam.c", "rebar.config", "rebar.config.script", "README.md", "LICENSE.txt"]},
+  {licenses, ["Apache 2.0"]},
+  {maintainers, ["ProcessOne"]},
+  {links, [{"Github", "https://github.com/processone/epam"}]}
+]}.
 
 %% Local Variables:
 %% mode: erlang

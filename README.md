@@ -1,3 +1,3 @@
 # epam
 
-epam for ejabberd to help with PAM authentication support
+epam helper for PAM authentication support
