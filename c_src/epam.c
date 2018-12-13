@@ -32,6 +32,10 @@
 #define BUFSIZE (1 << 16)
 #define CMD_AUTH 0
 #define CMD_ACCT 1
+#define CMD_CHAUTHTOK 2
+
+#define CUR_PASSWD 0
+#define NEW_PASSWD 1
 
 typedef unsigned char byte;
 
@@ -42,28 +46,80 @@ static void delay_fn(int retval, unsigned usec_delay, void *appdata_ptr)
 }
 #endif
 
+typedef struct _conv_func_rec {
+  const char * prompt;
+  void (*func)(struct pam_response **resp, void * password);
+} conv_func_rec;
+
+static void _cur_passwd(struct pam_response ** resp, void * password)
+{
+  char ** passwd = (char**) password;
+  (*resp)[0].resp = strdup(passwd[CUR_PASSWD]);
+}
+
+static void _new_passwd(struct pam_response ** resp, void * password)
+{
+  char ** passwd = (char**) password;
+  (*resp)[0].resp = strdup(passwd[NEW_PASSWD]);
+}
+
+#define CURRENT_PWD_PROMPT "Current password:"
+#define NEW_PWD_PROMPT "New password:"
+#define RETYPE_PWD_PROMPT "Retype new password:"
+#define PWD_PROMPT "Password:"
+
+static conv_func_rec conv_func_tbl[] = {
+                                        {PWD_PROMPT        , _cur_passwd},
+                                        {CURRENT_PWD_PROMPT, _cur_passwd},
+                                        {NEW_PWD_PROMPT    , _new_passwd},
+                                        {RETYPE_PWD_PROMPT , _new_passwd},
+                                        0
+};
+
+static void _conv_response(const struct pam_message **m,
+                           struct pam_response ** r,
+                           void * p)
+{
+  conv_func_rec * i = conv_func_tbl;
+  
+  while (strncmp(m[0]->msg, i->prompt, strlen(i->prompt)) != 0)
+    i++;
+
+  i->func(r, p);  
+}
+
 static int misc_conv(int num_msg,
-		     const struct pam_message **msg,
-		     struct pam_response **resp,
-		     void *password)
+                     const struct pam_message **msg,
+                     struct pam_response **resp,
+                     void *password)
 {
   int msg_style;
+
   if (num_msg != 1)
     return PAM_CONV_ERR;
+
   msg_style = msg[0]->msg_style;
+
   if ((msg_style != PAM_PROMPT_ECHO_OFF) && (msg_style != PAM_PROMPT_ECHO_ON))
     return PAM_CONV_ERR;
+
   *resp = malloc(sizeof(struct pam_response));
   (*resp)[0].resp_retcode = 0;
-  (*resp)[0].resp = strdup(password);
+
+  _conv_response(msg, resp, password);
+  
   return PAM_SUCCESS;
 }
 
-static int auth(char *service, char *user, char *password, char *rhost)
+static int auth(char *service, char *user, char *curpass, char *rhost)
 {
-  struct pam_conv conv = {misc_conv, password};
+  char * password[2];  
+  struct pam_conv conv = {misc_conv, (void *) password};
   int retval;
   pam_handle_t *pamh = NULL;
+
+  password[CUR_PASSWD] = curpass;
+  
   retval = pam_start(service, user, &conv, &pamh);
   if (retval == PAM_SUCCESS)
     retval = pam_set_item(pamh, PAM_RUSER, user);
@@ -99,6 +155,34 @@ static int acct_mgmt(char *service, char *user)
   return retval;
 }
 
+static int chauthtok(char *service, char *user, char *curpass, char *newpass)
+{
+  char * password[2];
+  struct pam_conv conv = {misc_conv, (void *) password};
+  int retval;
+  pam_handle_t *pamh = NULL;
+
+  password[CUR_PASSWD] = curpass;
+  password[NEW_PASSWD] = newpass;
+  
+  retval = pam_start(service, user, &conv, &pamh);
+
+  if (retval == PAM_SUCCESS)
+    retval = pam_set_item(pamh, PAM_RUSER, user);
+  
+#ifdef PAM_FAIL_DELAY
+  if (retval == PAM_SUCCESS)
+    retval = pam_set_item(pamh, PAM_FAIL_DELAY, (void *)delay_fn);
+#endif
+
+  if (retval == PAM_SUCCESS)
+    retval = pam_chauthtok(pamh, PAM_SILENT);
+  
+  pam_end(pamh, retval);
+  
+  return retval;
+}
+
 static int read_buf(int fd, byte *buf, int len)
 {
   int i, got = 0;
@@ -106,7 +190,7 @@ static int read_buf(int fd, byte *buf, int len)
     if ((i = read(fd, buf+got, len-got)) <= 0) {
       if (i == 0) return got;
       if (errno != EINTR)
-	return got;
+        return got;
       i = 0;
     }
     got += i;
@@ -131,7 +215,7 @@ static int write_buf(int fd, char *buf, int len)
   do {
     if ((i = write(fd, buf+done, len-done)) < 0) {
       if (errno != EINTR)
-	return (i);
+        return (i);
       i = 0;
     }
     done += i;
@@ -225,6 +309,36 @@ static int process_auth(ETERM *pid, ETERM *data)
   return retval;
 }
 
+static int process_chauthtok(ETERM *pid, ETERM *data)
+{
+  int retval = 0;
+  ETERM *pattern, *srv, *user, *cpass, *npass;
+  char *service, *username, *curpass, *newpass;
+  pattern = erl_format("{Srv, User, CurPass, NewPass}");
+  if (erl_match(pattern, data))
+    {
+      srv = erl_var_content(pattern, "Srv");
+      service = erl_iolist_to_string(srv);
+      user = erl_var_content(pattern, "User");
+      username = erl_iolist_to_string(user);
+      cpass = erl_var_content(pattern, "CurPass");
+      curpass = erl_iolist_to_string(cpass);
+      npass = erl_var_content(pattern, "NewPass");
+      newpass = erl_iolist_to_string(npass);
+      retval = process_reply(pid, CMD_CHAUTHTOK, chauthtok(service, username, curpass, newpass));
+      erl_free_term(srv);
+      erl_free_term(user);
+      erl_free_term(cpass);
+      erl_free_term(npass);
+      erl_free(service);
+      erl_free(username);
+      erl_free(curpass);
+      erl_free(newpass);
+    };
+  erl_free_term(pattern);
+  return retval;
+}
+
 static int process_command(byte *buf)
 {
   int retval = 0;
@@ -237,14 +351,17 @@ static int process_command(byte *buf)
       port = erl_var_content(pattern, "Port");
       data = erl_var_content(pattern, "Data");
       switch (ERL_INT_VALUE(cmd))
-	{
-	case CMD_AUTH:
-	  retval = process_auth(port, data);
-	  break;
-	case CMD_ACCT:
-	  retval = process_acct(port, data);
-	  break;
-	};
+        {
+        case CMD_AUTH:
+          retval = process_auth(port, data);
+          break;
+        case CMD_ACCT:
+          retval = process_acct(port, data);
+          break;
+        case CMD_CHAUTHTOK:
+          retval = process_chauthtok(port, data);
+          break;
+        };
       erl_free_term(cmd);
       erl_free_term(port);
       erl_free_term(data);
