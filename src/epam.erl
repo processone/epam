@@ -141,14 +141,11 @@ handle_cast(_Msg, State) -> {noreply, State}.
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 get_bin_path() ->
-    case os:getenv("EJABBERD_BIN_PATH") of
-	false ->
-	    case code:priv_dir(epam) of
-		{error, _} ->
-                    filename:join(["priv", "bin"]);
-		Path ->
-		    filename:join([Path, "bin"])
-	    end;
+    case code:priv_dir(epam) of
+	{error, _} ->
+	    EbinDir = filename:dirname(code:which(epam)),
+	    AppDir = filename:dirname(EbinDir),
+	    filename:join([AppDir, "priv", "bin"]);
 	Path ->
-	    Path
+	    filename:join([Path, "bin"])
     end.
