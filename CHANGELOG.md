@@ -1,3 +1,8 @@
+# Version 1.0.5
+
+* Add contribution guide
+* Fix detection of location of executable
+
 # Version 1.0.4
 
 * Fix compilation with rebar3
