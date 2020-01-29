@@ -5,7 +5,7 @@
 %%% Created : 5 Jul 2007 by Evgeniy Khramtsov <xram@jabber.ru>
 %%%
 %%%
-%%% Copyright (C) 2002-2019 ProcessOne, SARL. All Rights Reserved.
+%%% Copyright (C) 2002-2020 ProcessOne, SARL. All Rights Reserved.
 %%%
 %%% Licensed under the Apache License, Version 2.0 (the "License");
 %%% you may not use this file except in compliance with the License.
