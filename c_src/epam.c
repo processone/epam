@@ -19,21 +19,29 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <erl_interface.h>
-#include <ei.h>
 #include <unistd.h>
+#include <errno.h>
 
-#define dec_int16(s) ((((unsigned char*)  (s))[0] << 8) | \
-                      (((unsigned char*)  (s))[1]))
+#define dec_int16(s) ((((unsigned char *)(s))[0] << 8) | \
+                      (((unsigned char *)(s))[1]))
 
-#define enc_int16(i, s) {((unsigned char*)(s))[0] = ((i) >> 8) & 0xff; \
-                        ((unsigned char*)(s))[1] = (i)         & 0xff;}
+#define enc_int16(i, s)                            \
+  {                                                \
+    ((unsigned char *)(s))[0] = ((i) >> 8) & 0xff; \
+    ((unsigned char *)(s))[1] = (i)&0xff;          \
+  }
 
 #define BUFSIZE (1 << 16)
 #define CMD_AUTH 0
 #define CMD_ACCT 1
 
 typedef unsigned char byte;
+
+typedef struct bin_t
+{
+  const char *data;
+  unsigned int len;
+} bin_t;
 
 #ifdef PAM_FAIL_DELAY
 static void delay_fn(int retval, unsigned usec_delay, void *appdata_ptr)
@@ -43,9 +51,9 @@ static void delay_fn(int retval, unsigned usec_delay, void *appdata_ptr)
 #endif
 
 static int misc_conv(int num_msg,
-		     const struct pam_message **msg,
-		     struct pam_response **resp,
-		     void *password)
+                     const struct pam_message **msg,
+                     struct pam_response **resp,
+                     void *password)
 {
   int msg_style;
   if (num_msg != 1)
@@ -59,9 +67,9 @@ static int misc_conv(int num_msg,
   return PAM_SUCCESS;
 }
 
-static int auth(char *service, char *user, char *password, char *rhost)
+static int auth(const char *service, const char *user, const char *password, const char *rhost)
 {
-  struct pam_conv conv = {misc_conv, password};
+  struct pam_conv conv = {misc_conv, (char *)password};
   int retval;
   pam_handle_t *pamh = NULL;
   retval = pam_start(service, user, &conv, &pamh);
@@ -81,7 +89,7 @@ static int auth(char *service, char *user, char *password, char *rhost)
   return retval;
 }
 
-static int acct_mgmt(char *service, char *user)
+static int acct_mgmt(const char *service, const char *user)
 {
   struct pam_conv conv = {misc_conv, NULL};
   int retval;
@@ -102,11 +110,14 @@ static int acct_mgmt(char *service, char *user)
 static int read_buf(int fd, byte *buf, int len)
 {
   int i, got = 0;
-  do {
-    if ((i = read(fd, buf+got, len-got)) <= 0) {
-      if (i == 0) return got;
+  do
+  {
+    if ((i = read(fd, buf + got, len - got)) <= 0)
+    {
+      if (i == 0)
+        return got;
       if (errno != EINTR)
-	return got;
+        return got;
       i = 0;
     }
     got += i;
@@ -125,13 +136,25 @@ static int read_cmd(byte *buf)
   return 1;
 }
 
-static int write_buf(int fd, char *buf, int len)
+static bin_t read_bin(byte **buf)
 {
-  int i, done = 0; 
-  do {
-    if ((i = write(fd, buf+done, len-done)) < 0) {
+  bin_t result;
+  result.len = dec_int16(*buf);
+  result.data = (const char*)(*buf + 2);
+  *buf = *buf + 2 + result.len + 1;
+
+  return result;
+}
+
+static int write_buf(int fd, const char *buf, int len)
+{
+  int i, done = 0;
+  do
+  {
+    if ((i = write(fd, buf + done, len - done)) < 0)
+    {
       if (errno != EINTR)
-	return (i);
+        return (i);
       i = 0;
     }
     done += i;
@@ -139,7 +162,7 @@ static int write_buf(int fd, char *buf, int len)
   return (len);
 }
 
-static int write_cmd(char *buf, int len)
+static int write_cmd(const char *buf, int len)
 {
   byte hd[2];
   enc_int16(len, hd);
@@ -150,115 +173,70 @@ static int write_cmd(char *buf, int len)
   return 1;
 }
 
-static int process_reply(ETERM *pid, int cmd, int res)
+static int process_reply(bin_t pid, int res)
 {
-  ETERM *result;
-  ETERM *errbin;
-  int len, retval;
+  byte hd[3];
+  int len;
   const char *errtxt;
-  byte *buf;
   if (res == PAM_SUCCESS)
-    result = erl_format("{~i, ~w, true}", cmd, pid);
+  {
+    enc_int16(pid.len + 2 + 1, hd);
+    hd[2] = 1;
+    if (write_buf(1, (char *)hd, 3) != 3)
+      return 0;
+    if (!write_cmd(pid.data, pid.len))
+      return 0;
+  }
   else
-    {
-      errtxt = pam_strerror(NULL, res);
-      errbin = erl_mk_binary(errtxt, strlen(errtxt));
-      result = erl_format("{~i, ~w, {false, ~w}}", cmd, pid, errbin);
-      erl_free_term(errbin);
-    }
-  len = erl_term_len(result);
-  buf = erl_malloc(len);
-  erl_encode(result, buf);
-  retval = write_cmd((char *)buf, len);
-  erl_free_term(result);
-  erl_free(buf);
-  return retval;
-}
-
-static int process_acct(ETERM *pid, ETERM *data)
-{
-  int retval = 0;
-  ETERM *pattern, *srv, *user;
-  char *service, *username;
-  pattern = erl_format("{Srv, User}");
-  if (erl_match(pattern, data))
-    {
-      srv = erl_var_content(pattern, "Srv");
-      service = erl_iolist_to_string(srv);
-      user = erl_var_content(pattern, "User");
-      username = erl_iolist_to_string(user);
-      retval = process_reply(pid, CMD_ACCT, acct_mgmt(service, username));
-      erl_free_term(srv);
-      erl_free_term(user);
-      erl_free(service);
-      erl_free(username);
-    }
-  erl_free_term(pattern);
-  return retval;
-}
-
-static int process_auth(ETERM *pid, ETERM *data)
-{
-  int retval = 0;
-  ETERM *pattern, *srv, *user, *pass, *rhost;
-  char *service, *username, *password, *remote_host;
-  pattern = erl_format("{Srv, User, Pass, Rhost}");
-  if (erl_match(pattern, data))
-    {
-      srv = erl_var_content(pattern, "Srv");
-      service = erl_iolist_to_string(srv);
-      user = erl_var_content(pattern, "User");
-      username = erl_iolist_to_string(user);
-      pass = erl_var_content(pattern, "Pass");
-      password = erl_iolist_to_string(pass);
-      rhost = erl_var_content(pattern, "Rhost");
-      remote_host = erl_iolist_to_string(rhost);
-      retval = process_reply(pid, CMD_AUTH, auth(service, username, password, remote_host));
-      erl_free_term(srv);
-      erl_free_term(user);
-      erl_free_term(pass);
-      erl_free(service);
-      erl_free(username);
-      erl_free(password);
-    };
-  erl_free_term(pattern);
-  return retval;
+  {
+    errtxt = pam_strerror(NULL, res);
+    len = strlen(errtxt);
+    enc_int16(pid.len + 2 + 1 + len + 2, hd);
+    hd[2] = 0;
+    if (write_buf(1, (char *)hd, 3) != 3)
+      return 0;
+    enc_int16(pid.len, hd);
+    if (!write_cmd(pid.data, pid.len))
+      return 0;
+    if (!write_cmd(errtxt, len))
+      return 0;
+  }
+  return 1;
 }
 
 static int process_command(byte *buf)
 {
-  int retval = 0;
-  ETERM *pattern, *tuple, *cmd, *port, *data;
-  pattern = erl_format("{Cmd, Port, Data}");
-  tuple = erl_decode(buf);
-  if (erl_match(pattern, tuple))
-    {
-      cmd = erl_var_content(pattern, "Cmd");
-      port = erl_var_content(pattern, "Port");
-      data = erl_var_content(pattern, "Data");
-      switch (ERL_INT_VALUE(cmd))
-	{
-	case CMD_AUTH:
-	  retval = process_auth(port, data);
-	  break;
-	case CMD_ACCT:
-	  retval = process_acct(port, data);
-	  break;
-	};
-      erl_free_term(cmd);
-      erl_free_term(port);
-      erl_free_term(data);
-    }
-  erl_free_term(pattern);
-  erl_free_term(tuple);
-  return retval;
+  switch (buf[0])
+  {
+  case CMD_AUTH:
+  {
+    byte *tmp = buf + 1;
+    bin_t pid = read_bin(&tmp);
+    bin_t srv = read_bin(&tmp);
+    bin_t user = read_bin(&tmp);
+    bin_t pass = read_bin(&tmp);
+    bin_t rhost = read_bin(&tmp);
+    return process_reply(pid, auth(srv.data, user.data, pass.data, rhost.data));
+  }
+  case CMD_ACCT:
+  {
+    byte *tmp = buf + 1;
+    bin_t pid = read_bin(&tmp);
+    bin_t srv = read_bin(&tmp);
+    bin_t user = read_bin(&tmp);
+    return process_reply(pid, acct_mgmt(srv.data, user.data));
+  }
+  default:
+    return 0;
+  };
 }
 
 static void loop(void)
 {
   byte buf[BUFSIZE];
   int retval = 0;
-  do {
+  do
+  {
     if (read_cmd(buf) > 0)
       retval = process_command(buf);
     else
@@ -268,7 +246,6 @@ static void loop(void)
 
 int main(int argc, char *argv[])
 {
-  erl_init(NULL, 0);
   loop();
   return 0;
 }

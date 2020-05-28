@@ -105,13 +105,17 @@ terminate(_Reason, #state{port = Port}) ->
 handle_call({authenticate, Srv, User, Pass, Rhost}, From,
 	    State) ->
     Port = State#state.port,
-    Data = term_to_binary({?CMD_AUTH, From,
-			   {Srv, User, Pass, Rhost}}),
+    FromBin = term_to_binary(From),
+    Data = <<?CMD_AUTH:8, (size(FromBin)):16/integer-big, FromBin/binary, 0:8,
+	     (size(Srv)):16/integer-big, Srv/binary, 0:8, (size(User)):16/integer-big, User/binary, 0:8,
+	     (size(Pass)):16/integer-big, Pass/binary, 0:8, (size(Rhost)):16/integer-big, Rhost/binary, 0:8>>,
     port_command(Port, Data),
     {noreply, State};
 handle_call({acct_mgmt, Srv, User}, From, State) ->
     Port = State#state.port,
-    Data = term_to_binary({?CMD_ACCT, From, {Srv, User}}),
+    FromBin = term_to_binary(From),
+    Data = <<?CMD_ACCT:8, (size(FromBin)):16/integer-big, FromBin/binary, 0:8,
+	     (size(Srv)):16/integer-big, Srv/binary, 0:8, (size(User)):16/integer-big, User/binary, 0:8>>,
     port_command(Port, Data),
     {noreply, State};
 handle_call(stop, _From, State) ->
@@ -121,12 +125,13 @@ handle_call(_Request, _From, State) ->
 
 handle_info({Port, {data, Data}},
 	    #state{port = Port} = State) ->
-    case binary_to_term(Data) of
-      {Cmd, To, Reply}
-	  when Cmd == (?CMD_AUTH); Cmd == (?CMD_ACCT) ->
-	  gen_server:reply(To, Reply);
-      Err ->
-	  error_logger:error_msg("Got invalid reply from ~p: ~p~n", [Port, Err])
+    case Data of
+	<<1:8, PidLen:16/integer-big, Pid:PidLen/binary>> ->
+	    gen_server:reply(binary_to_term(Pid), true);
+	<<0:8, PidLen:16/integer-big, Pid:PidLen/binary, ErrLen:16/integer-big, ErrTxt:ErrLen/binary>> ->
+	    gen_server:reply(binary_to_term(Pid), {false, ErrTxt});
+	Err ->
+	    error_logger:error_msg("Got invalid reply from ~p: ~p~n", [Port, Err])
     end,
     {noreply, State};
 handle_info({Port, {exit_status, _}},
