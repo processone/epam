@@ -20,6 +20,14 @@ otp_release:
   - 17.1
   - 19.3
   - 23.0
+# Disable otp_release 17.1, & 19.3 as these releases are not supported on Ubuntu16.04 for arch: ppc64le
+jobs: 
+ exclude:
+  - arch: ppc64le
+    otp_release: 17.1
+  - arch: ppc64le
+    otp_release: 19.3
+  
 
 after_success:
   - cpp-coveralls --exclude lib --exclude tests --gcov-options '\-lp' --dump c.json
