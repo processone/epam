@@ -1,3 +1,8 @@
+# Version 1.0.10
+
+* Exclude old OTP releases from Travis
+* Fix hex to support compiling ejabberd with rebar3
+
 # Version 1.0.8
 
 * Fix compatibility issues with Erlang 23
