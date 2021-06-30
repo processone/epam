@@ -34,7 +34,7 @@ jobs:
     - name: Prepare libraries
       run: |
         sudo apt-get -qq update
-        sudo apt-get -qq install libgd-dev libjpeg-dev libpng-dev libwebp-dev
+        sudo apt-get -qq install libpam-dev
     - run: ./configure --enable-gcov
     - run: rebar3 compile
     - run: rebar3 eunit -v
