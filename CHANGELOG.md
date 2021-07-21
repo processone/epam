@@ -1,3 +1,7 @@
+# Version 1.0.12
+
+* Fix building without calling configure first
+
 # Version 1.0.11
 
 * Switch from using Travis to Github Actions as CI
