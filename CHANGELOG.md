@@ -1,3 +1,8 @@
+# Version 1.0.11
+
+* Switch from using Travis to Github Actions as CI
+* Fix compatibility with OTP24
+
 # Version 1.0.10
 
 * Exclude old OTP releases from Travis
