@@ -14,6 +14,10 @@ jobs:
 
       - name: Generate documentation
         run: rebar3 edoc
+      - name: Prepare libraries
+        run: |
+          apt-get -qq update
+          apt-get -qq install libpam-dev
       - name: Setup rebar3 hex
         run: |
           mkdir -p ~/.config/rebar3/
