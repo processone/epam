@@ -32,7 +32,8 @@
 %% API
 -export([start_link/0, start/0, stop/0]).
 
--export([authenticate/3, authenticate/4, acct_mgmt/2]).
+-export([authenticate/3, authenticate/4, authenticate/5]).
+-export([acct_mgmt/2, acct_mgmt/3]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2,
@@ -50,6 +51,8 @@
 
 -define(CMD_AUTH, 0).
 -define(CMD_ACCT, 1).
+
+-define(is_timeout(T), ((is_integer(T) andalso T >= 0) orelse T == infinity)).
 
 -record(state, {port}).
 
@@ -69,17 +72,26 @@ start_link() ->
 
 authenticate(Srv, User, Pass)
     when is_binary(Srv), is_binary(User), is_binary(Pass) ->
-    gen_server:call(?PROCNAME,
-		    {authenticate, Srv, User, Pass, <<"">>}).
+    authenticate(Srv, User, Pass, <<"">>).
 
 authenticate(Srv, User, Pass, Rhost)
     when is_binary(Srv), is_binary(User), is_binary(Pass), is_binary(Rhost) ->
-    gen_server:call(?PROCNAME,
-		    {authenticate, Srv, User, Pass, Rhost}).
+    authenticate(Srv, User, Pass, Rhost, default_timeout());
+authenticate(Srv, User, Pass, Timeout)
+    when is_binary(Srv), is_binary(User), is_binary(Pass), ?is_timeout(Timeout) ->
+    authenticate(Srv, User, Pass, <<"">>, Timeout).
+
+authenticate(Srv, User, Pass, Rhost, Timeout)
+    when is_binary(Srv), is_binary(User), is_binary(Pass), is_binary(Rhost), ?is_timeout(Timeout) ->
+    gen_server:call(?PROCNAME, {authenticate, Srv, User, Pass, Rhost}, Timeout).
 
 acct_mgmt(Srv, User)
     when is_binary(Srv), is_binary(User) ->
-    gen_server:call(?PROCNAME, {acct_mgmt, Srv, User}).
+    acct_mgmt(Srv, User, default_timeout()).
+
+acct_mgmt(Srv, User, Timeout)
+    when is_binary(Srv), is_binary(User), ?is_timeout(Timeout) ->
+    gen_server:call(?PROCNAME, {acct_mgmt, Srv, User}, Timeout).
 
 init([]) ->
     FileName = filename:join(get_bin_path(), "epam"),
@@ -154,3 +166,6 @@ get_bin_path() ->
 	Path ->
 	    filename:join([Path, "bin"])
     end.
+
+default_timeout() ->
+    application:get_env(epam, request_timeout, timer:seconds(5)).
