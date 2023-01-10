@@ -1,3 +1,8 @@
+# Version 1.0.13
+
+* Make it possible to set timeout explicitly
+* Update copyright year
+
 # Version 1.0.12
 
 * Fix building without calling configure first
